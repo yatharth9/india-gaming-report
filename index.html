@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Level Up India — A Gaming Growth Run</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#0c0a1f; overflow:hidden; font-family:'Space Mono',monospace; }
+  #wrap { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  .hud {
+    position:absolute; top:0; left:0; right:0; padding:14px 18px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    pointer-events:none; z-index:5;
+  }
+  .hud-left, .hud-right { display:flex; flex-direction:column; gap:4px; }
+  .hud-right { align-items:flex-end; text-align:right; }
+  .chip {
+    background:rgba(12,10,31,.66); border:1px solid rgba(255,153,51,.45);
+    color:#ffd9a8; padding:5px 11px; border-radius:999px; font-size:12px;
+    letter-spacing:.5px; backdrop-filter:blur(6px);
+  }
+  .chip b { color:#fff; }
+  .score-big {
+    font-family:'Bungee',sans-serif; font-size:30px; color:#fff;
+    text-shadow:0 0 18px rgba(255,153,51,.7), 0 3px 0 #b8470d; line-height:1;
+  }
+  .score-big span { font-size:13px; color:#19a974; }
+
+  .banner {
+    position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
+    text-align:center; z-index:6; pointer-events:none; width:90%; max-width:560px;
+  }
+  .banner h1 {
+    font-family:'Bungee',sans-serif; color:#fff; font-size:clamp(28px,7vw,54px);
+    line-height:.98; text-shadow:0 0 30px rgba(255,153,51,.8), 0 5px 0 #b8470d;
+  }
+  .banner h1 .ind { color:#19a974; }
+  .banner p { color:#e7d6c2; margin-top:14px; font-size:14px; line-height:1.6; }
+  .banner .start {
+    margin-top:22px; pointer-events:auto; display:inline-block; cursor:pointer;
+    font-family:'Bungee',sans-serif; font-size:18px; color:#0c0a1f;
+    background:linear-gradient(180deg,#ffb347,#ff9933); border:0;
+    padding:14px 30px; border-radius:14px; box-shadow:0 6px 0 #b8470d, 0 12px 24px rgba(0,0,0,.4);
+    transition:transform .08s, box-shadow .08s;
+  }
+  .banner .start:active { transform:translateY(4px); box-shadow:0 2px 0 #b8470d; }
+  .hidden { display:none !important; }
+
+  .toast {
+    position:absolute; left:50%; bottom:88px; transform:translateX(-50%);
+    background:rgba(25,169,116,.92); color:#04210f; font-weight:700;
+    padding:9px 16px; border-radius:10px; font-size:13px; z-index:6;
+    opacity:0; transition:opacity .35s, transform .35s; pointer-events:none;
+    text-align:center; max-width:80%;
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(-8px); }
+
+  .controls {
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    color:#9b8fb5; font-size:11px; z-index:5; text-align:center; letter-spacing:.5px;
+  }
+  .legend {
+    position:absolute; bottom:14px; right:14px; z-index:5;
+    background:rgba(12,10,31,.6); border:1px solid rgba(255,255,255,.1);
+    border-radius:10px; padding:9px 12px; font-size:10.5px; color:#cbbfe0; line-height:1.7;
+    backdrop-filter:blur(6px); max-width:230px;
+  }
+  .legend b{color:#fff;}
+  .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="hud">
+    <div class="hud-left">
+      <div class="score-big" id="score">0<span> CR ₹</span></div>
+      <div class="chip" id="dist">Distance · <b>0</b> m</div>
+    </div>
+    <div class="hud-right">
+      <div class="chip" id="players">Players reached · <b>0</b>M</div>
+      <div class="chip" id="seg">Sector · <b>Casual & Mid-core</b></div>
+      <div class="chip" id="lives">Lives · <b>❤❤❤</b></div>
+    </div>
+  </div>
+
+  <div class="banner" id="banner">
+    <h1>LEVEL&nbsp;UP <span class="ind">INDIA</span></h1>
+    <p>India is the world's largest gaming audience — <b>~590M+ players</b> — but it captures barely <b>1%</b> of global revenue. Run the post-2025 landscape: dodge the regulatory pits where real-money gaming collapsed, and collect the real growth: <b>in-app purchases, mid-core, esports &amp; cloud</b>.</p>
+    <button class="start" id="startBtn">PRESS START ▶</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="controls">← → or A/D to move &nbsp;·&nbsp; SPACE / W / ↑ to jump &nbsp;·&nbsp; collect 🪙 growth, avoid the red 28% GST pits</div>
+  <div class="legend">
+    <div><span class="sw" style="background:#ffcf5c"></span><b>Coins</b> — IAP / content revenue</div>
+    <div><span class="sw" style="background:#19a974"></span><b>Green gems</b> — esports &amp; cloud growth</div>
+    <div><span class="sw" style="background:#e23b3b"></span><b>Red blocks</b> — RMG ban / 28% GST hit</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   LEVEL UP INDIA — a WebGL sidescroller (Three.js / WebGL)
+   Theme: India's gaming-market growth opportunities.
+   Built as a Super Mario Bros-style runner-platformer.
+   ============================================================ */
+
+const WORLD = {
+  gravity: -0.058,
+  jump: 1.18,
+  moveSpeed: 0.17,
+  groundY: 0,
+  tileSize: 1,
+};
+
+let scene, camera, renderer, clock;
+let player, playerVel = {x:0, y:0}, onGround = false;
+let keys = {};
+let running = false, gameOver = false;
+let scoreCR = 0;        // revenue in "crore ₹" flavour
+let distance = 0;       // metres travelled
+let playersReached = 0; // M players unlocked
+let lives = 3;
+let cameraX = 0;
+
+// segment narrative as you progress (maps to report's growth areas)
+const SEGMENTS = [
+  {at:0,    name:"Casual & Mid-core"},
+  {at:120,  name:"In-App Purchases (44% CAGR)"},
+  {at:260,  name:"Esports & Creators"},
+  {at:400,  name:"Cloud + 5G Gaming"},
+  {at:560,  name:"Vernacular / Tier-2 Reach"},
+];
+let curSeg = 0;
+
+const colliders = [];   // platform AABBs
+const coins = [];       // collectibles
+const hazards = [];      // hazard AABBs (red blocks)
+const decoMeshes = [];
+
+const dom = {
+  score: document.getElementById('score'),
+  dist: document.getElementById('dist').querySelector('b'),
+  players: document.getElementById('players').querySelector('b'),
+  seg: document.getElementById('seg').querySelector('b'),
+  lives: document.getElementById('lives').querySelector('b'),
+  banner: document.getElementById('banner'),
+  toast: document.getElementById('toast'),
+};
+
+/* ---------- init ---------- */
+function init() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x1a1140, 22, 60);
+
+  camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 200);
+  camera.position.set(0, 3.2, 14);
+  camera.lookAt(0, 2.5, 0);
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.getElementById('wrap').appendChild(renderer.domElement);
+
+  clock = new THREE.Clock();
+
+  buildSky();
+  buildLights();
+  buildPlayer();
+  buildLevel();
+
+  addEventListener('resize', onResize);
+  addEventListener('keydown', e => { keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  addEventListener('keyup',   e => { keys[e.code]=false; });
+
+  animate();
+}
+
+/* ---------- sky / gradient backdrop ---------- */
+function buildSky() {
+  const geo = new THREE.SphereGeometry(120, 32, 16);
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: {
+      top:    {value: new THREE.Color(0x2b1a5e)},
+      mid:    {value: new THREE.Color(0x6d2bb0)},
+      bottom: {value: new THREE.Color(0xff7a3d)},
+    },
+    vertexShader:`varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+    fragmentShader:`
+      varying vec3 vP; uniform vec3 top; uniform vec3 mid; uniform vec3 bottom;
+      void main(){
+        float h = normalize(vP).y;
+        vec3 c = h>0.0 ? mix(mid, top, h) : mix(mid, bottom, -h);
+        gl_FragColor = vec4(c,1.0);
+      }`
+  });
+  scene.add(new THREE.Mesh(geo, mat));
+
+  // distant sun disc (warm, "rising market" motif)
+  const sun = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 48),
+    new THREE.MeshBasicMaterial({color:0xffd27a})
+  );
+  sun.position.set(10, 10, -40);
+  scene.add(sun);
+
+  // parallax city silhouettes (Indian skyline abstraction)
+  for (let layer=0; layer<3; layer++){
+    const depth = -18 - layer*8;
+    const shade = [0x3a2466, 0x2a1a4d, 0x1d1238][layer];
+    for (let i=-4; i<60; i++){
+      if (Math.random()<0.35) continue;
+      const w = 1.4 + Math.random()*2.2;
+      const h = 2 + Math.random()*(6 - layer*1.2);
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, 1),
+        new THREE.MeshBasicMaterial({color:shade})
+      );
+      b.position.set(i*4.2 + layer*1.5, h/2 - 1, depth);
+      b.userData.parallax = 0.25 + layer*0.18;
+      decoMeshes.push(b); scene.add(b);
+    }
+  }
+}
+
+function buildLights() {
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const key = new THREE.DirectionalLight(0xffe6c2, 1.05);
+  key.position.set(6, 14, 8);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024,1024);
+  key.shadow.camera.left=-30; key.shadow.camera.right=30;
+  key.shadow.camera.top=30; key.shadow.camera.bottom=-30;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x6d8bff, 0.5);
+  rim.position.set(-8, 6, -4);
+  scene.add(rim);
+}
+
+/* ---------- player (a little "controller" hero) ---------- */
+function buildPlayer() {
+  player = new THREE.Group();
+
+  const bodyMat = new THREE.MeshStandardMaterial({color:0xff9933, roughness:.5, metalness:.1});
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.95,0.85), bodyMat);
+  body.castShadow = true; player.add(body);
+
+  // white belly (tricolor nod)
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.4,0.88),
+    new THREE.MeshStandardMaterial({color:0xffffff, roughness:.6}));
+  belly.position.y=-0.18; player.add(belly);
+
+  // green base
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.86,0.22,0.86),
+    new THREE.MeshStandardMaterial({color:0x19a974, roughness:.5}));
+  base.position.y=-0.55; player.add(base);
+
+  // eyes
+  const eyeMat = new THREE.MeshStandardMaterial({color:0x0c0a1f});
+  for (const sx of [-0.2,0.2]){
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1,12,12), eyeMat);
+    eye.position.set(sx,0.18,0.45); player.add(eye);
+    const sheen = new THREE.Mesh(new THREE.SphereGeometry(0.035,8,8),
+      new THREE.MeshBasicMaterial({color:0xffffff}));
+    sheen.position.set(sx+0.03,0.22,0.52); player.add(sheen);
+  }
+
+  player.position.set(0, 1.0, 0);
+  player.userData.spawn = {x:0, y:1.0};
+  scene.add(player);
+}
+
+/* ---------- materials for level ---------- */
+const matGround = new THREE.MeshStandardMaterial({color:0x19a974, roughness:.85});
+const matSoil   = new THREE.MeshStandardMaterial({color:0x5a3b22, roughness:.95});
+const matBrick  = new THREE.MeshStandardMaterial({color:0xc77b3b, roughness:.7});
+const matPlat   = new THREE.MeshStandardMaterial({color:0x8a5cf6, roughness:.55, metalness:.15});
+const matHaz    = new THREE.MeshStandardMaterial({color:0xe23b3b, emissive:0x5a0d0d, roughness:.5});
+
+function addBox(x,y,w,h,d,mat,isHazard=false){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,0); m.castShadow=true; m.receiveShadow=true;
+  scene.add(m);
+  const aabb = {x:x-w/2, y:y-h/2, w:w, h:h, mesh:m};
+  if (isHazard) hazards.push(aabb); else colliders.push(aabb);
+  return m;
+}
+
+function addCoin(x,y,type='coin'){
+  const isGem = type==='gem';
+  const geo = isGem ? new THREE.OctahedronGeometry(0.32)
+                    : new THREE.CylinderGeometry(0.34,0.34,0.1,20);
+  const mat = new THREE.MeshStandardMaterial({
+    color: isGem ? 0x19f08c : 0xffcf5c,
+    emissive: isGem ? 0x0a6b3e : 0x7a5500,
+    metalness:.6, roughness:.25
+  });
+  const m = new THREE.Mesh(geo, mat);
+  if (!isGem) m.rotation.x = Math.PI/2;
+  m.position.set(x,y,0); m.castShadow=true;
+  scene.add(m);
+  coins.push({x, y, mesh:m, taken:false, type, spin:Math.random()*Math.PI});
+}
+
+/* ---------- procedural-ish handcrafted level ---------- */
+function buildLevel(){
+  // continuous-ish ground with deliberate "regulatory pits"
+  // ground segments: [startX, endX]
+  const groundSpans = [
+    [-6, 18], [22, 40], [44, 64], [69, 92],
+    [96, 120], [125, 150], [156, 184],
+    [188, 214], [219, 248], [252, 300],
+  ];
+  // The GAPS between spans are the "pits" — fall = lose a life.
+  groundSpans.forEach(([a,b])=>{
+    const w = b-a;
+    addBox(a + w/2, -0.6, w, 1.2, 4, matGround);
+    addBox(a + w/2, -2.2, w, 2.4, 4, matSoil); // soil below for depth
+  });
+
+  // floating brick platforms + coins above them
+  const plats = [
+    [9, 2.4, 3], [14, 3.8, 2], [27, 2.6, 3], [33, 4.0, 2],
+    [50, 2.8, 4], [58, 4.2, 2], [74, 2.6, 3], [82, 3.9, 3],
+    [102, 2.8, 3], [110, 4.2, 2], [131, 3.0, 4], [142, 4.4, 2],
+    [162, 2.7, 3], [172, 4.0, 3], [194, 3.0, 3], [205, 4.4, 2],
+    [225, 2.8, 4], [236, 4.2, 2], [260, 3.0, 3], [272, 4.4, 3],
+    [284, 3.0, 2],
+  ];
+  plats.forEach(([x,y,n])=>{
+    addBox(x, y, n, 0.6, 2, matBrick);
+    for (let i=0;i<n;i++){
+      addCoin(x - (n-1)/2 + i, y+0.95, 'coin');
+    }
+  });
+
+  // ground-level coin trails
+  for (let x=2; x<300; x+=3){
+    // only place coins where there's ground roughly beneath
+    if (groundSpans.some(([a,b])=> x>a+0.5 && x<b-0.5) && Math.random()<0.5){
+      addCoin(x, 1.0, 'coin');
+    }
+  }
+
+  // green growth gems at milestone points (esports, cloud, etc.)
+  [[30,3.0],[78,3.0],[120,2.0],[168,3.2],[210,3.4],[266,3.6],[290,2.0]]
+    .forEach(([x,y])=> addCoin(x,y,'gem'));
+
+  // hazards — red "ban/GST" blocks on the ground at a few choke points
+  const hazSpots = [16, 38, 62, 90, 148, 182, 246];
+  hazSpots.forEach(x=>{
+    if (groundSpans.some(([a,b])=> x>a && x<b)){
+      addBox(x, 0.4, 0.9, 0.9, 1.2, matHaz, true);
+    }
+  });
+
+  // finish flag
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,7,8),
+    new THREE.MeshStandardMaterial({color:0xffffff}));
+  pole.position.set(296, 3, 0); scene.add(pole);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.6,1.0),
+    new THREE.MeshStandardMaterial({color:0x19a974, side:THREE.DoubleSide}));
+  flag.position.set(296.85, 5.6, 0); scene.add(flag);
+  window.__finishX = 296;
+}
+
+/* ---------- physics helpers ---------- */
+function aabbOverlap(px,py,pw,ph, b){
+  return px < b.x+b.w && px+pw > b.x && py < b.y+b.h && py+ph > b.y;
+}
+
+const P_W = 0.85, P_H = 1.5; // player collision box
+
+function physics(){
+  // horizontal input
+  let mx = 0;
+  if (keys['ArrowLeft']||keys['KeyA']) mx -= 1;
+  if (keys['ArrowRight']||keys['KeyD']) mx += 1;
+  playerVel.x = mx * WORLD.moveSpeed;
+
+  // jump
+  if ((keys['Space']||keys['ArrowUp']||keys['KeyW']) && onGround){
+    playerVel.y = WORLD.jump; onGround=false;
+  }
+
+  // gravity
+  playerVel.y += WORLD.gravity;
+  if (playerVel.y < -1.4) playerVel.y = -1.4;
+
+  // --- X movement + collision ---
+  let nx = player.position.x + playerVel.x;
+  const px0 = nx - P_W/2, py0 = player.position.y - P_H/2;
+  for (const b of colliders){
+    if (aabbOverlap(px0, py0, P_W, P_H, b)){
+      if (playerVel.x>0) nx = b.x - P_W/2;
+      else if (playerVel.x<0) nx = b.x + b.w + P_W/2;
+      playerVel.x = 0;
+    }
+  }
+  if (nx < -5.5) nx = -5.5; // left wall
+  player.position.x = nx;
+
+  // --- Y movement + collision ---
+  let ny = player.position.y + playerVel.y;
+  const py1 = ny - P_H/2, px1 = player.position.x - P_W/2;
+  onGround = false;
+  for (const b of colliders){
+    if (aabbOverlap(px1, py1, P_W, P_H, b)){
+      if (playerVel.y <= 0){            // landing
+        ny = b.y + b.h + P_H/2;
+        playerVel.y = 0; onGround = true;
+      } else {                          // bonk head
+        ny = b.y - P_H/2;
+        playerVel.y = 0;
+      }
+    }
+  }
+  player.position.y = ny;
+
+  // squash/stretch feedback
+  player.scale.y = THREE.MathUtils.lerp(player.scale.y, onGround?1:1.12, 0.25);
+  player.scale.x = THREE.MathUtils.lerp(player.scale.x, onGround?1:0.92, 0.25);
+
+  // face direction
+  if (mx!==0) player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, mx>0?0:Math.PI, 0.3);
+
+  // --- hazards ---
+  for (const h of hazards){
+    if (aabbOverlap(player.position.x-P_W/2, player.position.y-P_H/2, P_W, P_H, h)){
+      loseLife("28% GST + RMG ban hit! Real-money revenue wiped out.");
+      return;
+    }
+  }
+
+  // --- pit / fall death ---
+  if (player.position.y < -6){
+    loseLife("Fell into a regulatory pit! Real-money gaming was banned in 2025.");
+    return;
+  }
+
+  // --- coins ---
+  for (const c of coins){
+    if (c.taken) continue;
+    if (Math.abs(player.position.x - c.x) < 0.7 && Math.abs(player.position.y - c.y) < 0.9){
+      c.taken = true; c.mesh.visible=false;
+      if (c.type==='gem'){
+        scoreCR += 25; playersReached += 12;
+        flashToast("💎 Esports / Cloud growth unlocked  +25 CR");
+      } else {
+        scoreCR += 5; playersReached += 3;
+      }
+    }
+  }
+
+  // --- distance / segment narrative ---
+  distance = Math.max(distance, Math.floor((player.position.x + 6) * 2));
+  while (curSeg < SEGMENTS.length-1 && distance >= SEGMENTS[curSeg+1].at){
+    curSeg++;
+    dom.seg.textContent = SEGMENTS[curSeg].name;
+    flashToast("▲ New growth sector: " + SEGMENTS[curSeg].name);
+  }
+
+  // --- finish ---
+  if (player.position.x >= window.__finishX){
+    win();
+  }
+
+  updateHUD();
+}
+
+function loseLife(msg){
+  lives--;
+  updateHUD();
+  flashToast("✖ " + msg + "  ("+lives+" lives left)");
+  if (lives <= 0){ endGame(false); return; }
+  // respawn at a safe recent ground span start
+  const safeX = Math.max(-5, Math.floor(player.position.x/40)*40 + 1);
+  player.position.set(safeX, 2.0, 0);
+  playerVel = {x:0,y:0};
+}
+
+function updateHUD(){
+  dom.score.childNodes[0].nodeValue = scoreCR.toString();
+  dom.dist.textContent = distance;
+  dom.players.textContent = Math.min(590, playersReached);
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function flashToast(text){
+  dom.toast.textContent = text;
+  dom.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> dom.toast.classList.remove('show'), 2400);
+}
+
+/* ---------- win / lose ---------- */
+function endGame(won){
+  running = false; gameOver = true;
+  dom.banner.classList.remove('hidden');
+  dom.banner.innerHTML = won ? `
+    <h1 style="color:#19a974">YOU REACHED <span class="ind" style="color:#fff">$9.2B</span></h1>
+    <p>You navigated past the real-money collapse and rode the real engines of growth — in-app purchases (44% CAGR), esports, and cloud + 5G — toward India's projected <b>$9.2B by FY2029</b>.<br><br>
+    <b>${scoreCR} CR ₹</b> collected · <b>${Math.min(590,playersReached)}M</b> players reached.</p>
+    <button class="start" id="startBtn">PLAY AGAIN ▶</button>` : `
+    <h1 style="color:#e23b3b">GAME OVER</h1>
+    <p>The market hit a wall — much like the ~$2.3B real-money segment did when the 2025 ban landed. But India's <b>590M+ players</b> aren't going anywhere. Try again and chase the durable growth instead.<br><br>
+    <b>${scoreCR} CR ₹</b> collected · <b>${distance}m</b> travelled.</p>
+    <button class="start" id="startBtn">RETRY ▶</button>`;
+  document.getElementById('startBtn').onclick = restart;
+}
+function win(){ endGame(true); }
+
+function restart(){
+  // reset state
+  scoreCR=0; distance=0; playersReached=0; lives=3; curSeg=0;
+  dom.seg.textContent = SEGMENTS[0].name;
+  coins.forEach(c=>{ c.taken=false; c.mesh.visible=true; });
+  player.position.set(0,1.0,0); playerVel={x:0,y:0};
+  dom.lives.textContent = "❤❤❤";
+  updateHUD();
+  dom.banner.classList.add('hidden');
+  gameOver=false; running=true;
+}
+
+/* ---------- main loop ---------- */
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // lives hearts
+  dom.lives.textContent = "❤".repeat(Math.max(0,lives)) + "♡".repeat(Math.max(0,3-lives));
+
+  if (running && !gameOver){
+    physics();
+  }
+
+  // spin coins/gems
+  for (const c of coins){
+    if (c.taken) continue;
+    if (c.type==='gem'){ c.mesh.rotation.y += 0.04; c.mesh.position.y = c.y + Math.sin(t*2+c.spin)*0.12; }
+    else { c.mesh.rotation.z += 0.08; }
+  }
+
+  // camera follows player smoothly
+  const targetX = Math.max(0, player.position.x);
+  cameraX = THREE.MathUtils.lerp(cameraX, targetX, 0.08);
+  camera.position.x = cameraX;
+  camera.position.y = THREE.MathUtils.lerp(camera.position.y, 3.2 + Math.max(0,player.position.y-1)*0.25, 0.06);
+  camera.lookAt(cameraX, 2.4, 0);
+
+  // parallax backdrop drift
+  for (const d of decoMeshes){
+    // keep silhouettes positioned relative to camera for parallax illusion
+    d.position.x += 0; // static world; parallax via depth + camera move is enough
+  }
+
+  renderer.render(scene, camera);
+}
+
+function onResize(){
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+/* ---------- boot ---------- */
+init();
+document.getElementById('startBtn').onclick = ()=>{
+  dom.banner.classList.add('hidden');
+  running = true; gameOver=false;
+};
+</script>
+</body>
+</html>
