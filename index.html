@@ -2,14 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Level Up India — A Gaming Growth Run</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { height:100%; background:#0c0a1f; overflow:hidden; font-family:'Space Mono',monospace; }
+  html,body { height:100%; background:#0c0a1f; overflow:hidden; font-family:'Space Mono',monospace;
+    -webkit-tap-highlight-color:transparent; touch-action:none; overscroll-behavior:none; }
   #wrap { position:fixed; inset:0; }
-  canvas { display:block; }
+  canvas { display:block; touch-action:none; }
 
   .hud {
     position:absolute; top:0; left:0; right:0; padding:14px 18px;
@@ -71,6 +74,28 @@
   }
   .legend b{color:#fff;}
   .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle;}
+
+  /* Touch controls — for tablets, phones, and any touchscreen device.
+     Visibility driven by a body.is-touch class set from JS (reliable),
+     with pointer:coarse as a secondary fallback. */
+  .touch { position:absolute; bottom:calc(46px + env(safe-area-inset-bottom,0px));
+    z-index:7; display:none; gap:14px; }
+  .touch.left  { left:calc(16px + env(safe-area-inset-left,0px)); }
+  .touch.right { right:calc(16px + env(safe-area-inset-right,0px)); }
+  .tbtn {
+    width:74px; height:74px; border-radius:18px; border:1px solid rgba(255,255,255,.3);
+    background:rgba(255,153,51,.26); color:#fff; font-size:30px; font-weight:900;
+    display:flex; align-items:center; justify-content:center; user-select:none;
+    -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.35);
+  }
+  .tbtn:active, .tbtn.pressed { background:rgba(255,153,51,.6); transform:scale(.94); }
+  body.is-touch .touch  { display:flex; }
+  body.is-touch .controls { display:none; }
+  body.is-touch .legend  { display:none; }
+  @media (pointer:coarse) {
+    .touch { display:flex; } .controls { display:none; } .legend { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -99,6 +124,14 @@
     <div><span class="sw" style="background:#ffcf5c"></span><b>Coins</b> — IAP / content revenue</div>
     <div><span class="sw" style="background:#19a974"></span><b>Green gems</b> — esports &amp; cloud growth</div>
     <div><span class="sw" style="background:#e23b3b"></span><b>Red blocks</b> — RMG ban / 28% GST hit</div>
+  </div>
+
+  <div class="touch left">
+    <div class="tbtn" id="btnLeft">◀</div>
+    <div class="tbtn" id="btnRight">▶</div>
+  </div>
+  <div class="touch right">
+    <div class="tbtn" id="btnJump">▲</div>
   </div>
 </div>
 
@@ -155,6 +188,8 @@ const dom = {
 
 /* ---------- init ---------- */
 function init() {
+  initMaterials();
+
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x1a1140, 22, 60);
 
@@ -177,10 +212,46 @@ function init() {
   buildLevel();
 
   addEventListener('resize', onResize);
+
+  animate();
+}
+
+/* ---------- input setup (kept separate from init() so it works even if
+   Three.js fails to load — the user still gets responsive controls). ---------- */
+function setupInput(){
   addEventListener('keydown', e => { keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   addEventListener('keyup',   e => { keys[e.code]=false; });
 
-  animate();
+  // ---- touch / mobile support ----
+  // Reliable detection (CSS media queries alone aren't trustworthy in iframes).
+  const IS_TOUCH = ('ontouchstart' in window)
+                || (navigator.maxTouchPoints > 0)
+                || (navigator.msMaxTouchPoints > 0);
+  if (IS_TOUCH) document.body.classList.add('is-touch');
+  // First-touch fallback: if detection was conservative, flip on at first tap.
+  window.addEventListener('touchstart', function onFirstTouch(){
+    document.body.classList.add('is-touch');
+    window.removeEventListener('touchstart', onFirstTouch);
+  }, {passive:true, once:true});
+
+  // Wire each button into the same `keys` object physics() already reads.
+  // Supports multi-touch (e.g. move + jump simultaneously) and never sticks.
+  function bindTouch(id, code){
+    const el = document.getElementById(id);
+    if (!el) return;
+    const down = ev => { ev.preventDefault(); keys[code] = true;  el.classList.add('pressed'); };
+    const up   = ev => { if (ev && ev.preventDefault) ev.preventDefault(); keys[code] = false; el.classList.remove('pressed'); };
+    el.addEventListener('touchstart',  down, {passive:false});
+    el.addEventListener('touchend',    up,   {passive:false});
+    el.addEventListener('touchcancel', up,   {passive:false});
+    // mouse fallback for touchscreen laptops / testing
+    el.addEventListener('mousedown',   down);
+    el.addEventListener('mouseup',     up);
+    el.addEventListener('mouseleave',  up);
+  }
+  bindTouch('btnLeft',  'ArrowLeft');
+  bindTouch('btnRight', 'ArrowRight');
+  bindTouch('btnJump',  'Space');
 }
 
 /* ---------- sky / gradient backdrop ---------- */
@@ -279,11 +350,16 @@ function buildPlayer() {
 }
 
 /* ---------- materials for level ---------- */
-const matGround = new THREE.MeshStandardMaterial({color:0x19a974, roughness:.85});
-const matSoil   = new THREE.MeshStandardMaterial({color:0x5a3b22, roughness:.95});
-const matBrick  = new THREE.MeshStandardMaterial({color:0xc77b3b, roughness:.7});
-const matPlat   = new THREE.MeshStandardMaterial({color:0x8a5cf6, roughness:.55, metalness:.15});
-const matHaz    = new THREE.MeshStandardMaterial({color:0xe23b3b, emissive:0x5a0d0d, roughness:.5});
+// materials are populated by initMaterials() from inside init(),
+// so a missing THREE doesn't crash the script during parsing.
+let matGround, matSoil, matBrick, matPlat, matHaz;
+function initMaterials(){
+  matGround = new THREE.MeshStandardMaterial({color:0x19a974, roughness:.85});
+  matSoil   = new THREE.MeshStandardMaterial({color:0x5a3b22, roughness:.95});
+  matBrick  = new THREE.MeshStandardMaterial({color:0xc77b3b, roughness:.7});
+  matPlat   = new THREE.MeshStandardMaterial({color:0x8a5cf6, roughness:.55, metalness:.15});
+  matHaz    = new THREE.MeshStandardMaterial({color:0xe23b3b, emissive:0x5a0d0d, roughness:.5});
+}
 
 function addBox(x,y,w,h,d,mat,isHazard=false){
   const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
@@ -573,8 +649,31 @@ function onResize(){
 }
 
 /* ---------- boot ---------- */
-init();
-document.getElementById('startBtn').onclick = ()=>{
+// Set up input FIRST and unconditionally — so even if Three.js fails to load
+// (CDN blocked, network error), the player still sees responsive buttons
+// and a clear message instead of a frozen screen.
+setupInput();
+
+if (typeof THREE === 'undefined') {
+  // Three.js didn't load — show a friendly message in the banner.
+  const b = document.getElementById('banner');
+  if (b) b.innerHTML =
+    '<h1 style="color:#e23b3b">Couldn\'t load 3D engine</h1>' +
+    '<p>This version of the game needs the Three.js library from a CDN, which appears to be blocked. ' +
+    'Open the file directly in a browser with internet access, or use the dependency-free version of the game instead.</p>';
+} else {
+  try { init(); }
+  catch (err) {
+    console.error(err);
+    const b = document.getElementById('banner');
+    if (b) b.innerHTML =
+      '<h1 style="color:#e23b3b">3D engine failed to start</h1>' +
+      '<p>' + (err && err.message ? err.message : 'Unknown error') + '</p>';
+  }
+}
+
+const _startBtn = document.getElementById('startBtn');
+if (_startBtn) _startBtn.onclick = ()=>{
   dom.banner.classList.add('hidden');
   running = true; gameOver=false;
 };
